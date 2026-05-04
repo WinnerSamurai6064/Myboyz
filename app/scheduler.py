@@ -1,19 +1,20 @@
-import asyncio
-import time
-import os
+import asyncio, time, os
 from app.bot import bot_instance, get_social, ADMIN_CHAT_ID
 from app.nim import rank_and_summarize_posts
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 ACTIVE_WINDOW_SECONDS = int(os.getenv("ACTIVE_WINDOW_SECONDS", "300"))
-active_windows = []  # list to track current window objects
+active_windows = []
+
 
 class ActiveWindow:
     def __init__(self):
         self.start_time = time.time()
         self.user_responded = False
-        self.task = asyncio.create_task(self._run_window())
+        self.original_posts = []
+        self.task = asyncio.create_task(self._run())
 
-    async def _run_window(self):
+    async def _run(self):
         await self.scan_and_notify()
         try:
             await asyncio.sleep(ACTIVE_WINDOW_SECONDS)
@@ -26,37 +27,42 @@ class ActiveWindow:
 
     async def scan_and_notify(self):
         soc = get_social()
-        raw_posts = await soc.search_content(["comicbooks", "baddies", "streetwear"], limit=30)
-        # Use NIM to rank and summarize
-        if raw_posts:
-            ranked = await rank_and_summarize_posts(raw_posts)
-            # Take top 10
-            top_posts = ranked[:10]
-            await send_content_card(top_posts)
+        raw = await soc.search_content(
+            ["comicbooks", "baddies", "streetwear"], limit=30
+        )
+        self.original_posts = raw
+        if raw:
+            ranked = await rank_and_summarize_posts(raw)
+            top = ranked[:10]
+            await _send_card(top)
 
     async def auto_like(self):
         soc = get_social()
-        # Like up to 3 posts from niche (simplified: just first 3 from original scan)
-        posts_to_like = (self.original_posts or [])[:3]
-        for p in posts_to_like:
+        to_like = (self.original_posts or [])[:3]
+        for p in to_like:
             await soc.like(p.id)
-        await bot_instance.bot.send_message(ADMIN_CHAT_ID, f"Auto-liked {len(posts_to_like)} posts.")
+        await bot_instance.bot.send_message(
+            ADMIN_CHAT_ID, f"🤖 Auto‑liked {len(to_like)} posts."
+        )
+
 
 async def start_active_window():
     window = ActiveWindow()
     active_windows.append(window)
 
-async def send_content_card(posts):
-    """Construct a Telegram message with inline keyboard for each post."""
+
+async def _send_card(posts):
     for post in posts:
-        inline_keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Like", callback_data=f"like_{post.id}"),
-             InlineKeyboardButton("Draft Comment", callback_data=f"commentdraft_{post.id}")]
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("❤️ Like", callback_data=f"like_{post.id}"),
+                InlineKeyboardButton("✏️ Draft", callback_data=f"commentdraft_{post.id}")
+            ]
         ])
-        caption = f"📌 {post.summary}\n🔗 [Link]({post.url})"
+        caption = f"📌 {post.summary}\n🔗 {post.url}"
         await bot_instance.bot.send_photo(
             chat_id=ADMIN_CHAT_ID,
             photo=post.thumbnail_url,
             caption=caption,
-            reply_markup=inline_keyboard
+            reply_markup=kb
         )
