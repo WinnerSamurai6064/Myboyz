@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: nemoclaw
+    env: docker
+    region: ohio
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ADMIN_CHAT_ID
+        sync: false
+      - key: NVIDIA_NIM_API_KEY
+        sync: false
+      - key: NIM_MODEL_KIMI
+        value: moonshotai/kimi-k2.5
+      - key: NIM_MODEL_GLM
+        value: z-ai/glm4.7
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_BUCKET_NAME
+        value: layzur-life
+      - key: ACTIVE_WINDOW_SECONDS
+        value: "300"
+      - key: TRIGGER_SECRET
+        sync: false
+    autoDeploy: true
