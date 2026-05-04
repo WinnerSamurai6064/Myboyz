@@ -1,26 +1,43 @@
 import os
 import pickle
-from azure.storage.blob import BlobServiceClient
+import boto3
+from botocore.config import Config
 
-CONN_STR = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-CONTAINER = os.getenv("BLOB_CONTAINER_NAME", "nemoclaw-state")
-SESSION_BLOB = os.getenv("SESSION_BLOB_NAME", "insta-session.pkl")
+R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
+R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
+R2_ENDPOINT_URL = os.getenv("R2_ENDPOINT_URL")
+R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "layzur-life")
+SESSION_BLOB_NAME = os.getenv("SESSION_BLOB_NAME", "insta-session.pkl")
 
-def _blob_client():
-    service = BlobServiceClient.from_connection_string(CONN_STR)
-    container = service.get_container_client(CONTAINER)
-    return container.get_blob_client(SESSION_BLOB)
+def _get_s3_client():
+    if not all([R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT_URL]):
+        raise EnvironmentError("Missing R2 credentials.")
+    return boto3.client(
+        's3',
+        endpoint_url=R2_ENDPOINT_URL,
+        aws_access_key_id=R2_ACCESS_KEY_ID,
+        aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+        config=Config(region_name='auto', signature_version='s3v4'),
+    )
 
 def load_session() -> dict | None:
     try:
-        blob = _blob_client()
-        if blob.exists():
-            stream = blob.download_blob()
-            return pickle.loads(stream.readall())
-    except Exception:
-        pass
+        s3 = _get_s3_client()
+        response = s3.get_object(Bucket=R2_BUCKET_NAME, Key=SESSION_BLOB_NAME)
+        return pickle.loads(response['Body'].read())
+    except s3.exceptions.NoSuchKey:
+        print("No existing session found in R2.")
+    except Exception as e:
+        print(f"Could not load session: {e}")
     return None
 
 def save_session(session: dict):
-    blob = _blob_client()
-    blob.upload_blob(pickle.dumps(session), overwrite=True)
+    try:
+        s3 = _get_s3_client()
+        s3.put_object(
+            Bucket=R2_BUCKET_NAME,
+            Key=SESSION_BLOB_NAME,
+            Body=pickle.dumps(session)
+        )
+    except Exception as e:
+        print(f"Could not save session: {e}")
