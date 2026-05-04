@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
 
 @dataclass
 class Post:
@@ -8,8 +9,10 @@ class Post:
     thumbnail_url: str
     caption: str
     author: str
-    hashtags: list
-    summary: str = ""  # filled by NIM
+    hashtags: list = field(default_factory=list)
+    summary: str = ""
+    score: int = 50
+
 
 class SocialClient(ABC):
     @abstractmethod
